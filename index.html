@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<style>[hidden]{display:none!important}body{margin:0}</style>
+<title>じゃんけん道場</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Maru+Gothic:wght@500;700&display=swap">
+<style>
+/* Layout: one-screen arena — opponent above, player below, big call in the middle, scoreboard strip on top */
+:root{
+  --bg:#EEF2F6; --panel:#FFFFFF; --ink:#1B2433; --muted:#5E6B7E; --line:#D3DBE5;
+  --accent:#E8590C; --win:#1F8A4C; --lose:#C92A3A; --draw:#6B7A90;
+  --ghost:rgba(27,36,51,.22); --ghost2:rgba(27,36,51,.1);
+  --display:"Dela Gothic One","Hiragino Sans","Yu Gothic",system-ui,sans-serif;
+  --body:"Zen Maru Gothic","Hiragino Maru Gothic ProN","Yu Gothic",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#121821; --panel:#1B2330; --ink:#EAF0F7; --muted:#9AA7B8; --line:#2C3747;
+  --accent:#FF8A3D; --win:#4CC27F; --lose:#FF6B78; --draw:#9AA7B8;
+  --ghost:rgba(234,240,247,.25); --ghost2:rgba(234,240,247,.11); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#121821; --panel:#1B2330; --ink:#EAF0F7; --muted:#9AA7B8; --line:#2C3747;
+  --accent:#FF8A3D; --win:#4CC27F; --lose:#FF6B78; --draw:#9AA7B8;
+  --ghost:rgba(234,240,247,.25); --ghost2:rgba(234,240,247,.11); color-scheme:dark}
+
+html,body{min-height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-block:20px 32px}
+.wrap{max-width:560px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+h1{font-family:var(--display);font-weight:400;font-size:1.9rem;margin:0;letter-spacing:.02em}
+h1 span{color:var(--accent)}
+.reset{font:inherit;font-size:.85rem;color:var(--muted);background:none;border:1px solid var(--line);border-radius:999px;padding:6px 14px;cursor:pointer}
+.reset:hover{color:var(--ink);border-color:var(--muted)}
+
+.score{display:grid;grid-template-columns:repeat(4,1fr);background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.score div{padding:10px 6px;text-align:center;display:flex;flex-direction:column;gap:2px}
+.score div+div{border-left:1px solid var(--line)}
+.score b{font-family:var(--display);font-weight:400;font-size:1.6rem;font-variant-numeric:tabular-nums;line-height:1.1}
+.score small{font-size:.72rem;color:var(--muted);letter-spacing:.08em}
+.w b{color:var(--win)} .l b{color:var(--lose)} .d b{color:var(--draw)}
+
+.arena{background:var(--panel);border:1px solid var(--line);border-radius:20px;padding:22px 16px;display:grid;grid-template-rows:auto auto auto;gap:10px;justify-items:center;text-align:center}
+.side{display:flex;flex-direction:column;align-items:center;gap:4px}
+.side small{font-size:.75rem;color:var(--muted);letter-spacing:.12em}
+.flip{position:relative;display:block}
+.cpu .flip{transform:rotate(180deg)}
+.hand{font-size:clamp(3.6rem,16vw,5.2rem);line-height:1.15;height:1.15em;display:block;position:relative;z-index:1}
+/* 振りかぶり中：上下に速く揺れ、残像とモーションブラーで手のぶれを表現 */
+.shake .hand{animation:shake .21s linear infinite;filter:blur(1.4px);
+  text-shadow:0 -14px 0 var(--ghost),0 14px 0 var(--ghost),0 -26px 2px var(--ghost2),0 26px 2px var(--ghost2)}
+@keyframes shake{
+  0%{transform:translate(0,0) rotate(0)}
+  25%{transform:translate(-3px,-16px) rotate(-9deg)}
+  50%{transform:translate(2px,0) rotate(4deg)}
+  75%{transform:translate(3px,10px) rotate(8deg)}
+  100%{transform:translate(0,0) rotate(0)}}
+/* 手を出した瞬間：ぶれが止まり、ぐっと前に出る */
+.throw .hand{animation:throw .38s cubic-bezier(.2,1.5,.4,1)}
+@keyframes throw{
+  0%{transform:translateY(-22px) scale(.75);filter:blur(5px);text-shadow:0 18px 0 var(--ghost),0 32px 2px var(--ghost2)}
+  45%{transform:translateY(4px) scale(1.18);filter:blur(0);text-shadow:0 6px 0 var(--ghost2)}
+  70%{transform:translateY(-2px) scale(.96)}
+  100%{transform:none;filter:none;text-shadow:none}}
+/* 着地の衝撃線 */
+.flip::before{content:"";position:absolute;left:50%;top:50%;width:150px;height:150px;margin:-75px 0 0 -75px;border-radius:50%;
+  background:repeating-conic-gradient(var(--accent) 0 5deg,transparent 5deg 30deg);
+  -webkit-mask:radial-gradient(circle,transparent 42%,#000 44%,#000 70%,transparent 72%);
+          mask:radial-gradient(circle,transparent 42%,#000 44%,#000 70%,transparent 72%);
+  opacity:0;transform:scale(.5);pointer-events:none}
+.throw .flip::before{animation:burst .42s ease-out}
+@keyframes burst{0%{opacity:0;transform:scale(.5)}25%{opacity:.85}100%{opacity:0;transform:scale(1.25)}}
+.call{font-family:var(--display);font-weight:400;font-size:clamp(1.7rem,7vw,2.4rem);min-height:1.4em;letter-spacing:.06em}
+.call.win{color:var(--win)} .call.lose{color:var(--lose)} .call.draw{color:var(--draw)}
+.pop{animation:pop .35s cubic-bezier(.3,1.6,.5,1)}
+@keyframes pop{from{transform:scale(.6);opacity:.3}to{transform:scale(1);opacity:1}}
+
+.picks{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.pick{font:inherit;background:var(--panel);color:var(--ink);border:2px solid var(--line);border-radius:16px;padding:14px 4px 10px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;transition:transform .12s,border-color .12s}
+.pick span{font-size:2.6rem;line-height:1}
+.pick em{font-style:normal;font-weight:700;font-size:.95rem}
+.pick kbd{font-family:var(--body);font-size:.7rem;color:var(--muted);border:1px solid var(--line);border-radius:5px;padding:0 5px}
+.pick:hover:not(:disabled){border-color:var(--accent);transform:translateY(-3px)}
+.pick:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.pick:disabled{opacity:.5;cursor:default}
+.pick.chosen{border-color:var(--accent);opacity:1}
+
+.log h2{font-size:.78rem;font-weight:700;color:var(--muted);letter-spacing:.12em;margin:0 0 8px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;min-height:30px}
+.chip{font-size:.85rem;padding:3px 10px;border-radius:999px;background:var(--bg);border:1px solid var(--line);white-space:nowrap}
+.chip.win{color:var(--win);border-color:currentColor}
+.chip.lose{color:var(--lose);border-color:currentColor}
+.chip.draw{color:var(--draw)}
+.empty{font-size:.85rem;color:var(--muted)}
+.streak{font-size:.9rem;color:var(--muted);text-align:center;min-height:1.4em}
+.streak strong{color:var(--accent)}
+@media (prefers-reduced-motion:reduce){.shake .hand,.throw .hand,.throw .flip::before,.pop{animation:none!important}.shake .hand{filter:none;text-shadow:none}.pick{transition:none}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>じゃんけん<span>道場</span></h1>
+    <button class="reset" id="reset" type="button">成績をリセット</button>
+  </header>
+
+  <section class="score" aria-label="成績">
+    <div class="w"><b id="sw">0</b><small>勝ち</small></div>
+    <div class="l"><b id="sl">0</b><small>負け</small></div>
+    <div class="d"><b id="sd">0</b><small>あいこ</small></div>
+    <div><b id="sr">–</b><small>勝率</small></div>
+  </section>
+
+  <section class="arena" aria-live="polite">
+    <div class="side cpu" id="cpuSide"><span class="flip"><span class="hand" id="cpuHand">✊</span></span><small>あいて</small></div>
+    <div class="call" id="call">手をえらんでね</div>
+    <div class="side you" id="youSide"><small>あなた</small><span class="flip"><span class="hand" id="youHand">✊</span></span></div>
+  </section>
+
+  <div class="picks" role="group" aria-label="手をえらぶ">
+    <button class="pick" id="p0" data-h="0" type="button"><span>✊</span><em>グー</em><kbd>1</kbd></button>
+    <button class="pick" id="p1" data-h="1" type="button"><span>✌️</span><em>チョキ</em><kbd>2</kbd></button>
+    <button class="pick" id="p2" data-h="2" type="button"><span>✋</span><em>パー</em><kbd>3</kbd></button>
+  </div>
+
+  <div class="streak" id="streak"></div>
+
+  <section class="log">
+    <h2>さいきんの勝負</h2>
+    <div class="chips" id="chips"></div>
+  </section>
+</div>
+
+<script>
+(function(){
+  const H=["✊","✌️","✋"], N=["グー","チョキ","パー"];
+  const KEY="janken-dojo-v1";
+  const $=id=>document.getElementById(id);
+  let s={w:0,l:0,d:0,streak:0,best:0,hist:[]};
+  let busy=false;
+
+  function load(init){
+    if(init&&init.w!=null){s=init;return}
+    try{const v=JSON.parse(localStorage.getItem(KEY));if(v&&v.hist)s=v}catch(e){}
+  }
+  function save(){try{localStorage.setItem(KEY,JSON.stringify(s))}catch(e){}}
+
+  function render(){
+    $("sw").textContent=s.w;$("sl").textContent=s.l;$("sd").textContent=s.d;
+    const dec=s.w+s.l;$("sr").textContent=dec?Math.round(s.w/dec*100)+"%":"–";
+    const c=$("chips");c.innerHTML="";
+    if(!s.hist.length){c.innerHTML='<span class="empty">まだ勝負していません。下のボタンか 1・2・3 キーで遊べます。</span>'}
+    s.hist.slice(0,12).forEach(h=>{
+      const el=document.createElement("span");
+      el.className="chip "+h.r;
+      el.textContent=H[h.y]+" vs "+H[h.c]+" "+({win:"勝ち",lose:"負け",draw:"あいこ"})[h.r];
+      c.appendChild(el);
+    });
+    $("streak").innerHTML=s.streak>=2?`<strong>${s.streak}連勝中！</strong>　最高 ${s.best} 連勝`:(s.best?`最高 ${s.best} 連勝`:"");
+  }
+
+  function setCall(t,cls){const c=$("call");c.className="call "+(cls||"");c.textContent=t;void c.offsetWidth;c.classList.add("pop")}
+
+  function play(y){
+    if(busy)return;busy=true;
+    document.querySelectorAll(".pick").forEach(b=>{b.disabled=true;b.classList.toggle("chosen",+b.dataset.h===y)});
+    $("youHand").textContent="✊";$("cpuHand").textContent="✊";
+    ["cpuSide","youSide"].forEach(id=>{$(id).classList.remove("throw");$(id).classList.add("shake")});
+    const steps=["じゃん","けん…"];let i=0;setCall(steps[0]);
+    const t=setInterval(()=>{
+      i++;
+      if(i<steps.length){setCall(steps[i]);return}
+      clearInterval(t);
+      const c=Math.floor(Math.random()*3);
+      ["cpuSide","youSide"].forEach(id=>{const el=$(id);el.classList.remove("shake");void el.offsetWidth;el.classList.add("throw")});
+      $("youHand").textContent=H[y];$("cpuHand").textContent=H[c];
+      const r=y===c?"draw":((y+1)%3===c?"win":"lose");
+      if(r==="win"){s.w++;s.streak++;s.best=Math.max(s.best,s.streak)}
+      else if(r==="lose"){s.l++;s.streak=0}
+      else s.d++;
+      s.hist.unshift({y,c,r});s.hist=s.hist.slice(0,12);
+      setCall(r==="win"?"ぽん！ かち！":r==="lose"?"ぽん！ まけ…":"ぽん！ あいこ",r);
+      save();render();
+      setTimeout(()=>{busy=false;document.querySelectorAll(".pick").forEach(b=>{b.disabled=false;b.classList.remove("chosen")})},350);
+    },420);
+  }
+
+  document.querySelectorAll(".pick").forEach(b=>b.addEventListener("click",()=>play(+b.dataset.h)));
+  document.addEventListener("keydown",e=>{if(["1","2","3"].includes(e.key))play(+e.key-1)});
+  $("reset").addEventListener("click",()=>{
+    if(busy)return;
+    s={w:0,l:0,d:0,streak:0,best:0,hist:[]};save();render();setCall("手をえらんでね");
+    $("youHand").textContent="✊";$("cpuHand").textContent="✊";
+  });
+
+  function start(data){load(data&&data.s);render()}
+  window.claude?.hot?.snapshot?.(()=>({s}));
+  window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
+})();
+</script>
+</body>
+</html>
